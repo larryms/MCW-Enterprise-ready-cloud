@@ -594,146 +594,15 @@ In this task, you will use the Azure management portal to validate each of the p
 
 2. To test further, change to a permitted name (e.g. 'erc-network-vnet') and try again---this time, the virtual network should be created without issue.
 
-## Exercise 2: Configure delegated permissions
+## Exercise 2: Tagging
 
-Duration: 60 minutes
+Duration: 30 minutes
 
 In this exercise, you will configure delegated permissions for users in the Trey Research business unit. You will use the Azure AD Graph commands in the Azure CLI to work with users and groups and you will extend a PowerShell script to automatically provision a limited access user with the configuration of the subscription.
 
-### Help references
 
-|    |            |
-|----------|:-------------:|
-| Add new users to Active Directory | <https://docs.microsoft.com/azure/active-directory/add-users-azure-active-directory> |
-| How Subscriptions are associated with Azure AD | <https://docs.microsoft.com/azure/active-directory/active-directory-how-subscriptions-associated-directory> |
-| Managing Azure AD Security Groups | <https://docs.microsoft.com/azure/active-directory/active-directory-groups-create-azure-portal> |
-| Role Based Access Control  | <https://docs.microsoft.com/azure/active-directory/role-based-access-control-configure> |
-| Manage RBAC with PowerShell | <https://docs.microsoft.com/azure/active-directory/role-based-access-control-manage-access-powershell> |
-| Manage Azure Active Directory Graph entities needed for RBAC | <https://docs.microsoft.com/cli/azure/ad?view=azure-cli-latest> |
 
-### Task 1: Create groups in Azure AD for delegation 
-
-In this task, you will create two groups in Azure AD that you will use for testing delegated access control. In the next task, users will be created that will be added to these new security groups.
-
-1. Launch the Azure Cloud Shell and select PowerShell. If prompted to create storage, click the **Create storage** button.
-
-    ![Azure portal screenshot showing the button to launch the Azure Cloud Shell.](images/Hands-onlabstep-by-step-Enterprise-readycloudimages/media/image93.png "Azure Cloud Shell launch button")
-
-    ![Azure portal screenshot showing the Azure Cloud Shell first launch experience.](images/Hands-onlabstep-by-step-Enterprise-readycloudimages/media/image94.png "Azure Cloud Shell PowerShell")
-
-    > **Note**: In the following commands, we will use the Azure CLI to provision users and groups in Azure AD. The PowerShell Cloud Shell gives us access to *both* the Azure PowerShell module (Az) and the Azure CLI.
-
-2. In the shell, execute the following script to create two new security groups:
-
-    ```powershell
-    az ad group create --display-name "BU-Electronics-Admins" --mail-nickname "BU-Electronics-Admins"
-    az ad group create --display-name "BU-Electronics-Users" --mail-nickname "BU-Electronics-Users"
-    ```
-
-### Task 2: Create user accounts in Azure AD for delegation 
-
-In this task, you will create two user accounts in Azure AD that you will use for testing delegated access control.
-
-1. Execute the following script to find out the name of your Azure AD tenant (this will be needed in the next step) and store it in a variable.
-
-    ```powershell
-    $aadDomain = (az ad signed-in-user show --query userPrincipalName -o tsv).Split("@")[1]
-    echo $aadDomain
-    ```
-
-1. Create the first user, **Electronics Admin** and add the user to the **BU-Electronics-Admins** security group.
-
-    ```powershell
-    az ad user create --display-name "Electronics Admin" --password "demo@pass123" --user-principal-name "ElectronicsAdmin@$aadDomain"
-    $memberId = (az ad user show --upn-or-object-id "ElectronicsAdmin@$aadDomain" --query objectId -o tsv)
-    az ad group member add --group "BU-Electronics-Admins" --member-id $memberId
-    ```
-
-1. Next, create the user **Electronics User** and add the user to the **BU-Electronics-Users** security group.
-
-    ```powershell
-    az ad user create --display-name "Electronics User" --password "demo@pass123" --user-principal-name "ElectronicsUser@$aadDomain"
-    $memberId = (az ad user show --upn-or-object-id "ElectronicsUser@$aadDomain" --query objectId -o tsv)
-    az ad group member add --group "BU-Electronics-Users" --member-id $memberId
-    ```
-
-### Task 3: Enable a business unit administrator for the subscription 
-
-In this task, you will update a script to automatically add a user to the contributor role of the subscription.
-
-1. Launch the Azure Cloud Shell and select PowerShell. If prompted to create storage, click the **Create storage** button.
-
-    ![Azure portal screenshot showing the button to launch the Azure Cloud Shell.](images/Hands-onlabstep-by-step-Enterprise-readycloudimages/media/image93.png "Azure Cloud Shell launch button")
-
-    ![Azure portal screenshot showing the Azure Cloud Shell first launch experience.](images/Hands-onlabstep-by-step-Enterprise-readycloudimages/media/image94.png "Azure Cloud Shell PowerShell")
-
-2. Create a new script the Cloud Shell using **code** by typing the following:
-
-    ```s
-    code 
-    ```
-
-3.  Add the following code to script, and save the file. This code will retrieve the object ID for the Active Directory group passed in and assign the group to the Contributor role on the subscription.
-
-    ```powershell
-    param([string]$SubscriptionId, [string]$AdGroupName) 
-
-    Select-AzSubscription -SubscriptionId $SubscriptionId
-
-    $scope = "/subscriptions/$SubscriptionId"
-
-    $groupObjectId = (Get-AzADGroup -SearchString $AdGroupName).Id
-
-    Write-Output "Adding group to contributor role"
-
-    New-AzRoleAssignment -Scope $scope `
-                            -RoleDefinitionName "Contributor" `
-                            -ObjectId $groupObjectId 
-    ```
-
-    This code will add an Azure AD security group to the contributor role at the subscription scope.
-
-4. Save the file as **ConfigureSubscription.ps1** by clicking **Save** in the menu behind the ellipsis (...).
-
-    ![Azure portal screenshot showing the Azure Cloud Shell and the Save function in code.](images/Hands-onlabstep-by-step-Enterprise-readycloudimages/media/image111.png "Azure Cloud Shell code Save file command")
-
-5. Close **code** using the **Close Editor** command by clicking **Close Editor** in the menu behind the ellipsis (...).
-
-6. Create a local variable in the **Console** containing your Subscription ID (you can copy your subscription ID from the Azure portal, or obtain it using `Get-AzSubscription`). In this example, we will obtain is using the referenced cmdlet.
-
-    ```powershell
-    $SubscriptionId = (Get-AzSubscription).SubscriptionId
-    ```
-
-    > **Note**: If your account has access to multiple Azure subscriptions you may need to alter the command to target the proper subscription using the `-SubscriptionId` or `-SubscriptionName` parameter with the `Get-AzSubscription` cmdlet.
-
-7. Execute the script passing in the `-SubscriptionID` and `-AdGroupName` parameters:
-
-    ```powershell
-    . $HOME\ConfigureSubscription.ps1 -SubscriptionId $SubscriptionId -AdGroupName "BU-Electronics-Admins"
-    ```
-
-8. In a different type of browser, or in an In-Private or Incognito mode window in your current browser navigate to the Azure management portal in a browser <http://portal.azure.com>, and sign in using the **ElectronicsAdmin** credentials created earlier. 
-
-    > **Note**: You may be prompted to configure a method of resetting your account. If you are, you can choose either a phone call or email.
-
-9. Select **All services**, search for **Subscriptions**, and then select **Subscriptions**.
-
-    ![Azure portal screenshot, showing subscriptions button](images/Hands-onlabstep-by-step-Enterprise-readycloudimages/media/image112.png "Subscriptions button")
-
-10.  Select the name of the subscription you have been working on.
-
-11. Select the **Access control (IAM)** tile and click the **Role assignments** tab:
-
-    ![Azure portal screenshot, showing \'Access Control (IAM)\' button](images/Hands-onlabstep-by-step-Enterprise-readycloudimages/media/image34.png "Access Control button")
-
-12. You should see the **BU-Electronics-Admins** group assigned to the contributor role.
-
-    ![Under User, the BU-Electronics-Admin group is circled. It has the Role of Contributor, and Access as Assigned.](images/Hands-onlabstep-by-step-Enterprise-readycloudimages/media/image113.png "BU-Electronics-Admin group")
-
-    > **Note**: Users in the Contributor role scoped at the subscription have full access to all the resources within the subscription, but cannot grant access to others or change policies on the subscription.
-
-### Task 4: Enable project-based delegation and chargeback with tags
+### Task 1: Enable project-based delegation and chargeback with tags
 
 In this task, you will create a script that will create a new resource group, assign 'Owner' rights over the resource group to a given AD group, and then apply a policy to enforce an 'IOCode' and 'CostCenter' tag with a given value.
 
@@ -759,8 +628,7 @@ In this task, you will create a script that will create a new resource group, as
         [string]$ResourceGroupName, 
         [String]$Location, 
         [String]$IOCode,
-        [String]$CostCenter,
-        [string]$AdGroupName
+        [String]$CostCenter
     ) 
 
     Select-AzSubscription -SubscriptionId $SubscriptionId
@@ -769,13 +637,6 @@ In this task, you will create a script that will create a new resource group, as
     New-AzResourceGroup -Name $ResourceGroupName -Location $Location 
 
     $scope = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName"
-
-    # Assign Owner role to given group
-    $groupObjectId = (Get-AzADGroup -SearchString $AdGroupName).Id
-
-    New-AzRoleAssignment -Scope $scope `
-                            -RoleDefinitionName "Owner" `
-                            -ObjectId $groupObjectId
 
     # Assign policy to apply IOCode tag
     $definition = Get-AzPolicyDefinition | where {$_.Properties.displayName -eq "Append tag and its default value"}
@@ -806,7 +667,7 @@ In this task, you will create a script that will create a new resource group, as
                                 -PolicyParameterObject $parameters
     ```
 
-    This code creates a new resource group in the specified region. It then assigns the group to the owner role definition just for the resource group. It will allow users in the group to have full ownership of resources within the resource group only. This code applies a built-in policy to append a tag with name 'IOCode' and another tag for 'CostCenter' and then applies the given tag value to any resource created in the resource group.
+    This code creates a new resource group in the specified region. This code applies a built-in policy to append a tag with name 'IOCode' and another tag for 'CostCenter' and then applies the given tag value to any resource created in the resource group.
 
     > **Note**: The 'Apply tag and its default value' policy applies tags to the resources included in the assignment scope, but it does not apply any tags to the parent resource group for those resources. It is important to understand that in Azure, tags are not automatically inherited from a parent object without additional configuration.
 
@@ -832,7 +693,7 @@ In this task, you will create a script that will create a new resource group, as
 8. In the **Console** pane, execute the following command to create a new resource group with delegated permissions and IO Code and Cost Center policies scoped to the resource group.
 
     ```powershell
-    . $HOME\CreateProjectResourceGroup.ps1 -SubscriptionId $SubscriptionId -ResourceGroupName $resourceGroupName -Location $location -IOCode "1000150" -CostCenter "Marketing" -AdGroupName "BU-Electronics-Admins"
+    . $HOME\CreateProjectResourceGroup.ps1 -SubscriptionId $SubscriptionId -ResourceGroupName $resourceGroupName -Location $location -IOCode "1000150" -CostCenter "Marketing" 
     ```
 
 9. Create a new storage account in the resource group (choose a unique name) to validate the ioCode tag was applied (replace *uniquestorageaccount* with a unique value).
@@ -857,31 +718,7 @@ In this task, you will create a script that will create a new resource group, as
 
     > **Note**: It can take several minutes for the policies assignments that were made in the previous step to take effect. If you find that the tags were not automatically applied, delete the storage account and recreate it. After recreating it, you should see the tags applied with the `Get-AzResource` cmdlet.
 
-11. Switch back to the Azure Management portal using the ElectronicsAdmin credentials.
 
-12. Select **Resource Groups**.
-
-13. Select the **DelegatedProjectDemoRG** resource group.
-
-    ![Screenshot of the DelegatedProjectDemo resource group.](images/Hands-onlabstep-by-step-Enterprise-readycloudimages/media/image114.png "DelegatedProjectDemo resource group")
-
-14. Select the **Access control (IAM)** icon, then select the **Role assignments** tab. Note that the BU-Electronics-Admins security group is set as an Owner of the resource group.
-
-    ![Under User, the BU-Electronics-Admin group now has the Role of Owner, Contributor, which is circled.](images/Hands-onlabstep-by-step-Enterprise-readycloudimages/media/image115.png "Owner, Contributor permissions")
-
-15. Select **+ Add** followed by **Add role assignment**.
-
-    ![Screenshot of the Add role assignments button.](images/Hands-onlabstep-by-step-Enterprise-readycloudimages/media/image116.png "Add role assignments button")
-
-16. Select **Owner** for the Role.
-
-    ![In the Select a role blade, Owner is circled.](images/Hands-onlabstep-by-step-Enterprise-readycloudimages/media/image41.png "Select a role blade")
-
-17. Select the **BU-Electronics-Users group** and select **Save** to add the group to the role.
-
-    ![BU-Electronics-Users is circled.](images/Hands-onlabstep-by-step-Enterprise-readycloudimages/media/image42.png "BU-Electronics-Users")
-
-Now both the security groups **BU-Electronics-Admins** and **BU-Electronics-Users** are both Owners of at the **DelegatedProjectDemoRG** scope and members of each security group have full control over the resource group and all of its resources.
 
 ## Exercise 3: Use Azure Blueprints to govern your Azure environment
 
